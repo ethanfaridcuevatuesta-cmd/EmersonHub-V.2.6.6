@@ -1,31 +1,30 @@
--- Emerson Hub V2.6.6 (LocalScript) - STUDIO ONLY
--- Mantiene UI exactamente como V2.6.2; MultiJump normal + hold (casi-jetpack suave);
--- Confirmaciones usando el estilo de V2.6.3 (StarterGui:SetCore "SendNotification").
--- Diseñado para pruebas en Roblox Studio. No se adapta a executors externos.
+-- Emerson Hub V2.6.6 (LocalScript)  -- STUDIO (StarterPlayerScripts)
+-- Mantiene UI exactamente como en V2.6.2 visualmente.
+-- Cambios solicitados: Multi Jump -> saltos normales + hold = ascenso controlado.
+-- Confirmación usando estilo V2.6.3 (StarterGui:SetCore SendNotification).
+-- LeftCtrl minimiza/restaura el panel.
+-- USAR EN ROBLOX STUDIO PARA PRUEBAS.
 
-local RunService = game:GetService("RunService")
-if not RunService:IsStudio() then
-    warn("[Emerson V2.6.6] Este script está diseñado para pruebas en Roblox Studio. Abortando fuera de Studio.")
-    return
-end
-
--- ===== Services & robust PlayerGui wait =====
+-- Servicios
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 local UIS = game:GetService("UserInputService")
-local TweenService = game:GetService("TweenService")
 local StarterGui = game:GetService("StarterGui")
 
+-- referenciar jugador
 local LocalPlayer = Players.LocalPlayer
+
+-- espera robusta PlayerGui (para inyección tardía en algunos entornos)
 local function waitPlayerGui(timeout)
     timeout = timeout or 10
     local t0 = tick()
-    while (not LocalPlayer or not LocalPlayer.Parent) and tick()-t0 < timeout do
+    while (not LocalPlayer or not LocalPlayer.Parent) and tick() - t0 < timeout do
         task.wait(0.03)
         LocalPlayer = Players.LocalPlayer
     end
     if not LocalPlayer then return nil end
     local t1 = tick()
-    while not LocalPlayer:FindFirstChild("PlayerGui") and tick()-t1 < timeout do
+    while not LocalPlayer:FindFirstChild("PlayerGui") and tick() - t1 < timeout do
         task.wait(0.03)
     end
     return LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui")
@@ -33,11 +32,11 @@ end
 
 local PlayerGui = waitPlayerGui(12)
 if not PlayerGui then
-    warn("[Emerson V2.6.6] No se encontró PlayerGui. Abortando.")
+    warn("[Emerson v2.6.6] No se encontró PlayerGui. Abortando.")
     return
 end
 
--- ===== Confirmation = estilo V2.6.3 (SendNotification) =====
+-- =============== Confirmación (estilo V2.6.3) ===============
 local function ShowConfirmation_V263(msg)
     pcall(function()
         StarterGui:SetCore("SendNotification", {
@@ -49,7 +48,7 @@ local function ShowConfirmation_V263(msg)
 end
 local function LocalShow(msg) pcall(ShowConfirmation_V263, msg) end
 
--- ===== UI CREATION (idéntica a V2.6.2 visual y comportamiento) =====
+-- =============== UI (idéntica a V2.6.2) ===============
 local function createUI()
     local gui = Instance.new("ScreenGui")
     gui.Name = "EmersonHub_v2_6_6"
@@ -105,7 +104,7 @@ local function createUI()
     local layout = Instance.new("UIListLayout", Scroll); layout.Padding = UDim.new(0,8); layout.SortOrder = Enum.SortOrder.LayoutOrder
     local pad = Instance.new("UIPadding", Scroll); pad.PaddingLeft = UDim.new(0,6); pad.PaddingRight = UDim.new(0,6); pad.PaddingTop = UDim.new(0,6)
 
-    -- rainbow driver for strokes and text
+    -- rainbow driver
     local rainbow = {h = 0, col = Color3.fromRGB(255,0,0)}
     task.spawn(function()
         while true do
@@ -132,7 +131,6 @@ local function createUI()
         btn.TextColor3 = rainbow.col
         btn.AutoButtonColor = true
         if callback then btn.MouseButton1Click:Connect(function() pcall(callback) end) end
-        -- animate rainbow
         task.spawn(function()
             while rect.Parent do
                 stroke.Color = rainbow.col
@@ -143,7 +141,7 @@ local function createUI()
         return rect, btn
     end
 
-    -- draggable
+    -- draggable behavior
     local dragging, dragStart, startPos
     titleBar.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -179,7 +177,7 @@ end
 
 local UI = createUI()
 
--- ======== Keep options exactly (no layout/config changes) ========
+-- =============== Variables y bindCharacter ===============
 local savedPos = nil
 local multiJumpEnabled = false
 local holdingJump = false
@@ -192,7 +190,6 @@ local function bindCharacter(c)
     char = c
     humanoid = c:FindFirstChildOfClass("Humanoid") or c:WaitForChild("Humanoid")
     rootPart = c:FindFirstChild("HumanoidRootPart") or c:WaitForChild("HumanoidRootPart")
-    -- do not change WalkSpeed unless Speed Boost is toggled
     if _G.Emerson_SpeedBoost_Active and humanoid then
         pcall(function() humanoid.WalkSpeed = 48 end)
     else
@@ -202,7 +199,7 @@ end
 Players.LocalPlayer.CharacterAdded:Connect(bindCharacter)
 if Players.LocalPlayer.Character then bindCharacter(Players.LocalPlayer.Character) end
 
--- ===== Options (same text as before) =====
+-- =============== Opciones (texto y comportamiento conservados) ===============
 UI.CreateOption("Guardar TP 1", function()
     if rootPart and rootPart.CFrame then
         savedPos = rootPart.CFrame
@@ -221,14 +218,14 @@ UI.CreateOption("Ir a TP 1", function()
     end
 end)
 
--- ===== MULTI-JUMP (comportamiento pedido) =====
--- Taps => normal jump (sin impulso grande)
--- Rapid taps => saltos consecutivos (sin límite)
--- Hold => pequeños pulsos regulares para ascenso controlado
+-- =============== Multi-Jump (comportamiento solicitado) ===============
+-- Taps => normal jump (no big velocity)
+-- Rapid taps => consecutive normal jumps (sin límite)
+-- Hold => pequeños pulsos que crean ascenso controlado (no exagerado)
 
-local holdImpulse = 5         -- pequeño incremento al Y por pulso manteniendo (ajustable)
-local holdInterval = 0.12     -- frecuencia de pulsos al mantener
-local maxHoldY = 60           -- tope de velocidad vertical al mantener
+local holdImpulse = 4.5         -- incremento Y por pulso mientras se mantiene (ajustable)
+local holdInterval = 0.12       -- frecuencia de pulsos
+local maxHoldY = 55             -- límite de velocidad vertical mientras se mantiene
 
 UIS.JumpRequest:Connect(function()
     if not multiJumpEnabled or not humanoid or not rootPart then return end
@@ -236,15 +233,14 @@ UIS.JumpRequest:Connect(function()
         humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
         humanoid.Jump = true
     end)
-    -- marque posibilidad de hold por taps rápidos
+    -- marca posibilidad de hold tras tap
     holdingJump = true
     lastHoldPulse = tick()
-    task.delay(0.6, function()
-        if tick() - lastHoldPulse > 0.58 then holdingJump = false end
+    task.delay(0.55, function()
+        if tick() - lastHoldPulse > 0.52 then holdingJump = false end
     end)
 end)
 
--- InputBegan/InputEnded para detectar hold con espacio
 UIS.InputBegan:Connect(function(input, gpe)
     if gpe then return end
     if input.UserInputType == Enum.UserInputType.Keyboard then
@@ -264,7 +260,7 @@ UIS.InputEnded:Connect(function(input, gpe)
     end
 end)
 
--- Heartbeat: aplicar pulsos al mantener
+-- aplicar pulsos de hold con Heartbeat
 RunService.Heartbeat:Connect(function(dt)
     if multiJumpEnabled and holdingJump and humanoid and rootPart then
         local now = tick()
@@ -278,7 +274,7 @@ RunService.Heartbeat:Connect(function(dt)
         end
     end
 
-    -- Noclip maintenance (unchanged)
+    -- mantener noclip (sin cambios)
     if noclipEnabled and char then
         for _,pn in pairs({"HumanoidRootPart","Torso","UpperTorso","LowerTorso","Head"}) do
             local p = char:FindFirstChild(pn)
@@ -287,7 +283,7 @@ RunService.Heartbeat:Connect(function(dt)
     end
 end)
 
--- Toggle Multi Jump with UI button (mensaje estilo V2.6.3)
+-- Toggle Multi Jump (UI)
 UI.CreateOption("Multi Jump", function()
     multiJumpEnabled = not multiJumpEnabled
     if multiJumpEnabled then
@@ -298,7 +294,7 @@ UI.CreateOption("Multi Jump", function()
     end
 end)
 
--- ===== Speed Boost (idéntico) =====
+-- Speed Boost (idéntico)
 _G.Emerson_SpeedBoost_Active = false
 UI.CreateOption("Speed Boost", function()
     speedBoostEnabled = not speedBoostEnabled
@@ -312,7 +308,7 @@ UI.CreateOption("Speed Boost", function()
     end
 end)
 
--- ===== Noclip (idéntico) =====
+-- Noclip (idéntico)
 UI.CreateOption("Noclip", function()
     noclipEnabled = not noclipEnabled
     UI.ShowMessage(noclipEnabled and "🟢 Noclip activado" or "🔴 Noclip desactivado")
