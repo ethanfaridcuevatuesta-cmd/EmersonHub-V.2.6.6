@@ -1,0 +1,342 @@
+-- Emerson Hub V2.6.6 (LocalScript - STUDIO ONLY)
+-- Mantiene EXACTAMENTE la UI / panel / opciones de V.2.6.5.
+-- Cambios: Multi Jump ajustado a SALTO NORMAL + hold = ascenso controlado.
+--          Notificaciones (confirmación) igual al estilo de V.2.6.3 (SendNotification).
+-- WARNING: Diseñado para pruebas en Roblox Studio. No se ejecuta fuera de Studio.
+
+local RunService = game:GetService("RunService")
+if not RunService:IsStudio() then
+    warn("[Emerson V2.6.6] Este script está diseñado para pruebas en Roblox Studio. No se ejecutará en entornos en vivo.")
+    return
+end
+
+-- ===== Services & robust PlayerGui wait =====
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UIS = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+
+local LocalPlayer = Players.LocalPlayer
+local function waitPlayerGui(timeout)
+    timeout = timeout or 10
+    local t0 = tick()
+    while (not LocalPlayer or not LocalPlayer.Parent) and tick()-t0 < timeout do
+        task.wait(0.03)
+        LocalPlayer = Players.LocalPlayer
+    end
+    if not LocalPlayer then return nil end
+    local t1 = tick()
+    while not LocalPlayer:FindFirstChild("PlayerGui") and tick()-t1 < timeout do
+        task.wait(0.03)
+    end
+    return LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui")
+end
+
+local PlayerGui = waitPlayerGui(12)
+if not PlayerGui then
+    warn("[Emerson V2.6.6] No se encontró PlayerGui. Abortando.")
+    return
+end
+
+-- ===== Confirmation = V2.6.3 style (SendNotification) =====
+local StarterGui = game:GetService("StarterGui")
+local function ShowConfirmation_V263(msg)
+    -- Igual que V2.6.3: usa la notificación nativa (fuente/tamaño del sistema)
+    pcall(function()
+        StarterGui:SetCore("SendNotification", {
+            Title = "Emerson Hub",
+            Text = msg,
+            Duration = 2
+        })
+    end)
+end
+
+local function LocalShow(msg) pcall(ShowConfirmation_V263, msg) end
+
+-- ===== UI CREATION (identical to V2.6.5 layout & style) =====
+local function createUI()
+    local gui = Instance.new("ScreenGui")
+    gui.Name = "EmersonHub_v2_6_6"
+    gui.ResetOnSpawn = false
+    gui.Parent = PlayerGui
+
+    local frame = Instance.new("Frame", gui)
+    frame.Name = "MainFrame"
+    frame.Size = UDim2.new(0, 260, 0, 300)
+    frame.Position = UDim2.new(0.35, 0, 0.22, 0)
+    frame.BackgroundColor3 = Color3.fromRGB(255,255,255)
+    frame.BorderSizePixel = 0
+    local rc = Instance.new("UICorner", frame); rc.CornerRadius = UDim.new(0,8)
+
+    local titleBar = Instance.new("Frame", frame)
+    titleBar.Name = "TitleBar"
+    titleBar.Size = UDim2.new(1,0,0,36)
+    titleBar.Position = UDim2.new(0,0,0,0)
+    titleBar.BackgroundTransparency = 1
+
+    local titleLabel = Instance.new("TextLabel", titleBar)
+    titleLabel.Size = UDim2.new(0.85,0,1,0)
+    titleLabel.Position = UDim2.new(0,6,0,0)
+    titleLabel.BackgroundTransparency = 1
+    titleLabel.Font = Enum.Font.Gotham
+    titleLabel.TextScaled = true
+    titleLabel.Text = "🦷 Emerson Hub — v2.6.6"
+    titleLabel.TextColor3 = Color3.fromRGB(0,0,0)
+    titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+    local toothBtn = Instance.new("TextButton", titleBar)
+    toothBtn.Size = UDim2.new(0.14, -8, 0.9, 0)
+    toothBtn.Position = UDim2.new(0.86, 4, 0.05, 0)
+    toothBtn.Text = "🦷"; toothBtn.Font = Enum.Font.SourceSans; toothBtn.TextScaled = true; toothBtn.BackgroundTransparency = 1
+
+    local miniBtn = Instance.new("TextButton", gui)
+    miniBtn.Name = "MiniBtn"
+    miniBtn.Size = UDim2.new(0, 44, 0, 44)
+    miniBtn.Position = frame.Position
+    miniBtn.Text = "🦷"
+    miniBtn.Font = Enum.Font.SourceSans
+    miniBtn.TextScaled = true
+    miniBtn.BackgroundTransparency = 0.2
+    miniBtn.Visible = false
+    local miniRC = Instance.new("UICorner", miniBtn); miniRC.CornerRadius = UDim.new(0,8)
+
+    local Scroll = Instance.new("ScrollingFrame", frame)
+    Scroll.Name = "OptionsScroll"
+    Scroll.Size = UDim2.new(1, -16, 1, -56)
+    Scroll.Position = UDim2.new(0,8,0,40)
+    Scroll.BackgroundTransparency = 1
+    Scroll.ScrollBarThickness = 6
+    local layout = Instance.new("UIListLayout", Scroll); layout.Padding = UDim.new(0,8); layout.SortOrder = Enum.SortOrder.LayoutOrder
+    local pad = Instance.new("UIPadding", Scroll); pad.PaddingLeft = UDim.new(0,6); pad.PaddingRight = UDim.new(0,6); pad.PaddingTop = UDim.new(0,6)
+
+    -- rainbow driver for strokes and text
+    local rainbow = {h = 0, col = Color3.fromRGB(255,0,0)}
+    task.spawn(function()
+        while true do
+            rainbow.h = (rainbow.h + 3) % 360
+            rainbow.col = Color3.fromHSV(rainbow.h/360, 1, 1)
+            task.wait(0.04)
+        end
+    end)
+
+    local function CreateOption(name, callback)
+        local rect = Instance.new("Frame", Scroll)
+        rect.Name = "OptRect_"..name:gsub("%s+","")
+        rect.Size = UDim2.new(1,0,0,36)
+        rect.BackgroundColor3 = Color3.fromRGB(119,136,153)
+        rect.BorderSizePixel = 0
+        local rcc = Instance.new("UICorner", rect); rcc.CornerRadius = UDim.new(0,6)
+        local stroke = Instance.new("UIStroke", rect); stroke.Thickness = 2
+        local btn = Instance.new("TextButton", rect)
+        btn.Size = UDim2.new(1,-8,1,-8); btn.Position = UDim2.new(0,4,0,4)
+        btn.BackgroundTransparency = 1
+        btn.Font = Enum.Font.SourceSans
+        btn.TextScaled = true
+        btn.Text = name
+        btn.TextColor3 = rainbow.col
+        btn.AutoButtonColor = true
+        if callback then btn.MouseButton1Click:Connect(function() pcall(callback) end) end
+        task.spawn(function()
+            while rect.Parent do
+                stroke.Color = rainbow.col
+                if btn.Parent then btn.TextColor3 = rainbow.col end
+                task.wait(0.04)
+            end
+        end)
+        return rect, btn
+    end
+
+    -- draggable
+    local dragging, dragStart, startPos
+    titleBar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = frame.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then dragging = false end
+            end)
+        end
+    end)
+    UIS.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            local delta = input.Position - dragStart
+            frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+
+    local minimized = false
+    local function minimize() minimized = true; frame.Visible = false; miniBtn.Position = frame.Position; miniBtn.Visible = true end
+    local function restore() minimized = false; frame.Visible = true; miniBtn.Visible = false end
+    toothBtn.MouseButton1Click:Connect(function() if minimized then restore() else minimize() end end)
+    miniBtn.MouseButton1Click:Connect(function() restore() end)
+
+    return {
+        Gui = gui,
+        Frame = frame,
+        Scroll = Scroll,
+        CreateOption = CreateOption,
+        ShowMessage = ShowConfirmation_V263
+    }
+end
+
+local UI = createUI()
+
+-- ======== Keep options exactly (no layout/config changes) ========
+local savedPos = nil
+local multiJumpEnabled = false
+local holdingJump = false
+local lastHoldPulse = 0
+local speedBoostEnabled = false
+local noclipEnabled = false
+local char, humanoid, rootPart
+
+local function bindCharacter(c)
+    char = c
+    humanoid = c:FindFirstChildOfClass("Humanoid") or c:WaitForChild("Humanoid")
+    rootPart = c:FindFirstChild("HumanoidRootPart") or c:WaitForChild("HumanoidRootPart")
+    -- do not change WalkSpeed unless Speed Boost is toggled
+    if _G.Emerson_SpeedBoost_Active and humanoid then
+        pcall(function() humanoid.WalkSpeed = 48 end)
+    else
+        pcall(function() humanoid.WalkSpeed = 16 end)
+    end
+end
+Players.LocalPlayer.CharacterAdded:Connect(bindCharacter)
+if Players.LocalPlayer.Character then bindCharacter(Players.LocalPlayer.Character) end
+
+-- ===== Options (same text as before) =====
+UI.CreateOption("Guardar TP 1", function()
+    if rootPart and rootPart.CFrame then
+        savedPos = rootPart.CFrame
+        LocalShow("📍 TP 1 guardado")
+    else
+        LocalShow("⚠️ No se pudo guardar posición")
+    end
+end)
+
+UI.CreateOption("Ir a TP 1", function()
+    if savedPos and rootPart then
+        pcall(function() rootPart.CFrame = savedPos end)
+        LocalShow("✅ Teletransportado a TP 1")
+    else
+        LocalShow("⚠️ No hay TP guardado")
+    end
+end)
+
+-- ===== MULTI-JUMP (V2.6.6 behavior: normal-height taps, unlimited, hold = controlled ascent) =====
+-- Implementation details:
+-- * Taps => use humanoid Jump (no added big velocity) to keep normal jump height
+-- * Rapid taps => unlimited consecutive jumps (by triggering humanoid.Jump each tap)
+-- * Hold => small periodic upward pulses applied to rootPart.Velocity for controlled ascent
+local holdImpulse = 5         -- small velocity added per pulse while holding (tuned for gentle ascent)
+local holdInterval = 0.12     -- seconds between pulses while holding
+local maxHoldY = 60           -- limit for upward velocity while holding
+
+UIS.JumpRequest:Connect(function()
+    if not multiJumpEnabled or not humanoid or not rootPart then return end
+    -- trigger a normal jump (keeps default jump height)
+    pcall(function()
+        humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+        humanoid.Jump = true
+    end)
+    -- mark hold possibility for quick holds
+    holdingJump = true
+    lastHoldPulse = tick()
+    -- short timeout to clear hold if user only tapped (helps mobile)
+    task.delay(0.6, function()
+        if tick() - lastHoldPulse > 0.58 then holdingJump = false end
+    end)
+end)
+
+-- detect space hold to enable continuous pulses (keyboard)
+UIS.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
+    if input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode == Enum.KeyCode.Space then
+        holdingJump = true
+        lastHoldPulse = tick()
+    end
+    -- Left Control minimizes/restores panel (as requested in earlier versions)
+    if input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode == Enum.KeyCode.LeftControl then
+        UI.Frame.Visible = not UI.Frame.Visible
+        if UI.Frame.Visible then LocalShow("🔓 Panel mostrado") else LocalShow("🔒 Panel minimizado") end
+    end
+end)
+UIS.InputEnded:Connect(function(input, gpe)
+    if gpe then return end
+    if input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode == Enum.KeyCode.Space then
+        holdingJump = false
+    end
+end)
+
+-- Heartbeat: apply hold pulses (gentle controlled ascent)
+RunService.Heartbeat:Connect(function(dt)
+    if multiJumpEnabled and holdingJump and humanoid and rootPart then
+        local now = tick()
+        if now - lastHoldPulse >= holdInterval then
+            lastHoldPulse = now
+            pcall(function()
+                local v = rootPart.Velocity
+                -- small upward addition, clamped to maxHoldY
+                local newY = math.min(v.Y + holdImpulse, maxHoldY)
+                rootPart.Velocity = Vector3.new(v.X, newY, v.Z)
+            end)
+        end
+    end
+
+    -- Noclip maintenance (unchanged)
+    if noclipEnabled and char then
+        for _,pn in pairs({"HumanoidRootPart","Torso","UpperTorso","LowerTorso","Head"}) do
+            local p = char:FindFirstChild(pn)
+            if p and p:IsA("BasePart") then p.CanCollide = false end
+        end
+    end
+end)
+
+-- Toggle Multi Jump with UI button (keeps messages identical to v2.6.3)
+UI.CreateOption("Multi Jump", function()
+    multiJumpEnabled = not multiJumpEnabled
+    if multiJumpEnabled then
+        LocalShow("🟢 Multi Jump activado")
+    else
+        holdingJump = false
+        LocalShow("🔴 Multi Jump desactivado")
+    end
+end)
+
+-- ===== Speed Boost (identical) =====
+_G.Emerson_SpeedBoost_Active = false
+UI.CreateOption("Speed Boost", function()
+    speedBoostEnabled = not speedBoostEnabled
+    _G.Emerson_SpeedBoost_Active = speedBoostEnabled
+    if speedBoostEnabled then
+        if humanoid then pcall(function() humanoid.WalkSpeed = 48 end) end
+        LocalShow("🟢 Speed Boost activado")
+    else
+        if humanoid then pcall(function() humanoid.WalkSpeed = 16 end) end
+        LocalShow("🔴 Speed Boost desactivado")
+    end
+end)
+
+-- ===== Noclip (identical) =====
+UI.CreateOption("Noclip", function()
+    noclipEnabled = not noclipEnabled
+    LocalShow(noclipEnabled and "🟢 Noclip activado" or "🔴 Noclip desactivado")
+end)
+
+-- Keep collisions off while noclip enabled (unchanged)
+RunService.Stepped:Connect(function()
+    if noclipEnabled and LocalPlayer.Character then
+        for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
+            if part:IsA("BasePart") and part.CanCollide then
+                part.CanCollide = false
+            end
+        end
+    end
+end)
+
+-- Rebind on respawn (unchanged)
+Players.LocalPlayer.CharacterAdded:Connect(function(c) bindCharacter(c) end)
+
+-- Initial confirmation
+LocalShow("✅ Emerson Hub v2.6.6 cargado. (UI v2.6.2 + MultiJump normal + Confirmación V2.6.3)")
