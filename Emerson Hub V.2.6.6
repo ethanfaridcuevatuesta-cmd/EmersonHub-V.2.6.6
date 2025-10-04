@@ -1,20 +1,19 @@
--- Emerson Hub V2.6.6 (LocalScript - STUDIO ONLY)
--- Mantiene EXACTAMENTE la UI / panel / opciones de V.2.6.5.
--- Cambios: Multi Jump ajustado a SALTO NORMAL + hold = ascenso controlado.
---          Notificaciones (confirmación) igual al estilo de V.2.6.3 (SendNotification).
--- WARNING: Diseñado para pruebas en Roblox Studio. No se ejecuta fuera de Studio.
+-- Emerson Hub V2.6.6 (LocalScript) - STUDIO ONLY
+-- Mantiene UI exactamente como V2.6.2; MultiJump normal + hold (casi-jetpack suave);
+-- Confirmaciones usando el estilo de V2.6.3 (StarterGui:SetCore "SendNotification").
+-- Diseñado para pruebas en Roblox Studio. No se adapta a executors externos.
 
 local RunService = game:GetService("RunService")
 if not RunService:IsStudio() then
-    warn("[Emerson V2.6.6] Este script está diseñado para pruebas en Roblox Studio. No se ejecutará en entornos en vivo.")
+    warn("[Emerson V2.6.6] Este script está diseñado para pruebas en Roblox Studio. Abortando fuera de Studio.")
     return
 end
 
 -- ===== Services & robust PlayerGui wait =====
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
 local UIS = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
+local StarterGui = game:GetService("StarterGui")
 
 local LocalPlayer = Players.LocalPlayer
 local function waitPlayerGui(timeout)
@@ -38,10 +37,8 @@ if not PlayerGui then
     return
 end
 
--- ===== Confirmation = V2.6.3 style (SendNotification) =====
-local StarterGui = game:GetService("StarterGui")
+-- ===== Confirmation = estilo V2.6.3 (SendNotification) =====
 local function ShowConfirmation_V263(msg)
-    -- Igual que V2.6.3: usa la notificación nativa (fuente/tamaño del sistema)
     pcall(function()
         StarterGui:SetCore("SendNotification", {
             Title = "Emerson Hub",
@@ -50,10 +47,9 @@ local function ShowConfirmation_V263(msg)
         })
     end)
 end
-
 local function LocalShow(msg) pcall(ShowConfirmation_V263, msg) end
 
--- ===== UI CREATION (identical to V2.6.5 layout & style) =====
+-- ===== UI CREATION (idéntica a V2.6.2 visual y comportamiento) =====
 local function createUI()
     local gui = Instance.new("ScreenGui")
     gui.Name = "EmersonHub_v2_6_6"
@@ -136,6 +132,7 @@ local function createUI()
         btn.TextColor3 = rainbow.col
         btn.AutoButtonColor = true
         if callback then btn.MouseButton1Click:Connect(function() pcall(callback) end) end
+        -- animate rainbow
         task.spawn(function()
             while rect.Parent do
                 stroke.Color = rainbow.col
@@ -176,7 +173,7 @@ local function createUI()
         Frame = frame,
         Scroll = Scroll,
         CreateOption = CreateOption,
-        ShowMessage = ShowConfirmation_V263
+        ShowMessage = LocalShow
     }
 end
 
@@ -209,57 +206,55 @@ if Players.LocalPlayer.Character then bindCharacter(Players.LocalPlayer.Characte
 UI.CreateOption("Guardar TP 1", function()
     if rootPart and rootPart.CFrame then
         savedPos = rootPart.CFrame
-        LocalShow("📍 TP 1 guardado")
+        UI.ShowMessage("📍 TP 1 guardado")
     else
-        LocalShow("⚠️ No se pudo guardar posición")
+        UI.ShowMessage("⚠️ No se pudo guardar posición")
     end
 end)
 
 UI.CreateOption("Ir a TP 1", function()
     if savedPos and rootPart then
         pcall(function() rootPart.CFrame = savedPos end)
-        LocalShow("✅ Teletransportado a TP 1")
+        UI.ShowMessage("✅ Teletransportado a TP 1")
     else
-        LocalShow("⚠️ No hay TP guardado")
+        UI.ShowMessage("⚠️ No hay TP guardado")
     end
 end)
 
--- ===== MULTI-JUMP (V2.6.6 behavior: normal-height taps, unlimited, hold = controlled ascent) =====
--- Implementation details:
--- * Taps => use humanoid Jump (no added big velocity) to keep normal jump height
--- * Rapid taps => unlimited consecutive jumps (by triggering humanoid.Jump each tap)
--- * Hold => small periodic upward pulses applied to rootPart.Velocity for controlled ascent
-local holdImpulse = 5         -- small velocity added per pulse while holding (tuned for gentle ascent)
-local holdInterval = 0.12     -- seconds between pulses while holding
-local maxHoldY = 60           -- limit for upward velocity while holding
+-- ===== MULTI-JUMP (comportamiento pedido) =====
+-- Taps => normal jump (sin impulso grande)
+-- Rapid taps => saltos consecutivos (sin límite)
+-- Hold => pequeños pulsos regulares para ascenso controlado
+
+local holdImpulse = 5         -- pequeño incremento al Y por pulso manteniendo (ajustable)
+local holdInterval = 0.12     -- frecuencia de pulsos al mantener
+local maxHoldY = 60           -- tope de velocidad vertical al mantener
 
 UIS.JumpRequest:Connect(function()
     if not multiJumpEnabled or not humanoid or not rootPart then return end
-    -- trigger a normal jump (keeps default jump height)
     pcall(function()
         humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
         humanoid.Jump = true
     end)
-    -- mark hold possibility for quick holds
+    -- marque posibilidad de hold por taps rápidos
     holdingJump = true
     lastHoldPulse = tick()
-    -- short timeout to clear hold if user only tapped (helps mobile)
     task.delay(0.6, function()
         if tick() - lastHoldPulse > 0.58 then holdingJump = false end
     end)
 end)
 
--- detect space hold to enable continuous pulses (keyboard)
+-- InputBegan/InputEnded para detectar hold con espacio
 UIS.InputBegan:Connect(function(input, gpe)
     if gpe then return end
-    if input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode == Enum.KeyCode.Space then
-        holdingJump = true
-        lastHoldPulse = tick()
-    end
-    -- Left Control minimizes/restores panel (as requested in earlier versions)
-    if input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode == Enum.KeyCode.LeftControl then
-        UI.Frame.Visible = not UI.Frame.Visible
-        if UI.Frame.Visible then LocalShow("🔓 Panel mostrado") else LocalShow("🔒 Panel minimizado") end
+    if input.UserInputType == Enum.UserInputType.Keyboard then
+        if input.KeyCode == Enum.KeyCode.Space then
+            holdingJump = true
+            lastHoldPulse = tick()
+        elseif input.KeyCode == Enum.KeyCode.LeftControl then
+            UI.Frame.Visible = not UI.Frame.Visible
+            if UI.Frame.Visible then UI.ShowMessage("🔓 Panel mostrado") else UI.ShowMessage("🔒 Panel minimizado") end
+        end
     end
 end)
 UIS.InputEnded:Connect(function(input, gpe)
@@ -269,7 +264,7 @@ UIS.InputEnded:Connect(function(input, gpe)
     end
 end)
 
--- Heartbeat: apply hold pulses (gentle controlled ascent)
+-- Heartbeat: aplicar pulsos al mantener
 RunService.Heartbeat:Connect(function(dt)
     if multiJumpEnabled and holdingJump and humanoid and rootPart then
         local now = tick()
@@ -277,7 +272,6 @@ RunService.Heartbeat:Connect(function(dt)
             lastHoldPulse = now
             pcall(function()
                 local v = rootPart.Velocity
-                -- small upward addition, clamped to maxHoldY
                 local newY = math.min(v.Y + holdImpulse, maxHoldY)
                 rootPart.Velocity = Vector3.new(v.X, newY, v.Z)
             end)
@@ -293,38 +287,38 @@ RunService.Heartbeat:Connect(function(dt)
     end
 end)
 
--- Toggle Multi Jump with UI button (keeps messages identical to v2.6.3)
+-- Toggle Multi Jump with UI button (mensaje estilo V2.6.3)
 UI.CreateOption("Multi Jump", function()
     multiJumpEnabled = not multiJumpEnabled
     if multiJumpEnabled then
-        LocalShow("🟢 Multi Jump activado")
+        UI.ShowMessage("🟢 Multi Jump activado")
     else
         holdingJump = false
-        LocalShow("🔴 Multi Jump desactivado")
+        UI.ShowMessage("🔴 Multi Jump desactivado")
     end
 end)
 
--- ===== Speed Boost (identical) =====
+-- ===== Speed Boost (idéntico) =====
 _G.Emerson_SpeedBoost_Active = false
 UI.CreateOption("Speed Boost", function()
     speedBoostEnabled = not speedBoostEnabled
     _G.Emerson_SpeedBoost_Active = speedBoostEnabled
     if speedBoostEnabled then
         if humanoid then pcall(function() humanoid.WalkSpeed = 48 end) end
-        LocalShow("🟢 Speed Boost activado")
+        UI.ShowMessage("🟢 Speed Boost activado")
     else
         if humanoid then pcall(function() humanoid.WalkSpeed = 16 end) end
-        LocalShow("🔴 Speed Boost desactivado")
+        UI.ShowMessage("🔴 Speed Boost desactivado")
     end
 end)
 
--- ===== Noclip (identical) =====
+-- ===== Noclip (idéntico) =====
 UI.CreateOption("Noclip", function()
     noclipEnabled = not noclipEnabled
-    LocalShow(noclipEnabled and "🟢 Noclip activado" or "🔴 Noclip desactivado")
+    UI.ShowMessage(noclipEnabled and "🟢 Noclip activado" or "🔴 Noclip desactivado")
 end)
 
--- Keep collisions off while noclip enabled (unchanged)
+-- mantener collisions off while noclip
 RunService.Stepped:Connect(function()
     if noclipEnabled and LocalPlayer.Character then
         for _, part in pairs(LocalPlayer.Character:GetDescendants()) do
@@ -335,8 +329,8 @@ RunService.Stepped:Connect(function()
     end
 end)
 
--- Rebind on respawn (unchanged)
+-- rebind on respawn
 Players.LocalPlayer.CharacterAdded:Connect(function(c) bindCharacter(c) end)
 
--- Initial confirmation
-LocalShow("✅ Emerson Hub v2.6.6 cargado. (UI v2.6.2 + MultiJump normal + Confirmación V2.6.3)")
+-- mensaje inicial
+UI.ShowMessage("✅ Emerson Hub v2.6.6 cargado. (UI v2.6.2 + MultiJump normal + Confirmación V2.6.3)")
